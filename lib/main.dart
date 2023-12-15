@@ -1,8 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
+
+class CustomMarker {
+  final String name;
+  final LatLng position;
+
+  CustomMarker(this.name, this.position);
+}
 
 void main() {
   runApp(const MyApp());
@@ -30,18 +39,51 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   static const _useTransformerId = 'useTransformerId';
 
   final markers = ValueNotifier<List<AnimatedMarker>>([]);
-  final center = const LatLng(51.509364, -0.128928);
+  final center = const LatLng(9.307519939764234, 42.125973344740515);
 
   bool _useTransformer = true;
   int _lastMovedToMarkerIndex = -1;
 
   late final _animatedMapController = AnimatedMapController(vsync: this);
+  List<CustomMarker> customMarkers = [];
+  late Timer timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // getRoute();
+
+    timer = Timer.periodic(Duration(seconds: 1), (Timer t) {
+      updateCustomMarkers();
+    });
+  }
 
   @override
   void dispose() {
     markers.dispose();
     _animatedMapController.dispose();
     super.dispose();
+  }
+
+  List<CustomMarker> getSharedMarkers() {
+    return [
+      CustomMarker('Chad', LatLng(9.310118436123041, 42.124504544137146)),
+      CustomMarker('Nigeria', LatLng(9.311075330917536, 42.11970723201347)),
+      CustomMarker('DRC', LatLng(9.301707721823323, 42.126954235434326)),
+      CustomMarker('CAR', LatLng(9.30367191871694, 42.111847805768306)),
+      CustomMarker('Sudan', LatLng(9.321449916744617, 42.12430040319571)),
+      CustomMarker('Kenya', LatLng(9.31928437331062, 42.112817475240114)),
+      CustomMarker('Zambia', LatLng(9.309312627948243, 42.12593353072717)),
+      CustomMarker('Egypt', LatLng(9.308053548956083, 42.11751271689307)),
+      CustomMarker('Algeria', LatLng(9.313492737674148, 42.12399419178357)),
+    ];
+  }
+
+  void updateCustomMarkers() {
+    // Clear and update the markers
+    customMarkers = List<CustomMarker>.from(getSharedMarkers());
+    // Add more markers or update existing ones
+    setState(() {});
   }
 
   @override
@@ -64,6 +106,24 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                 tileProvider: CancellableNetworkTileProvider(),
               ),
               AnimatedMarkerLayer(markers: markers),
+              MarkerLayer(
+                markers: [
+                  for (var marker in customMarkers)
+                    Marker(
+                      width: 80.0,
+                      height: 80.0,
+                      point: marker.position,
+                      // Wrap the Icon with GestureDetector
+                      child: GestureDetector(
+                        onTap: () => onMarkerTap(marker),
+                        child: const Icon(
+                          Icons.local_taxi,
+                          color: Color.fromARGB(255, 1, 1, 1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           );
         },
@@ -237,6 +297,10 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     } catch (e, stackTrace) {
       print('Error adding marker: $e\n$stackTrace');
     }
+  }
+
+  void onMarkerTap(CustomMarker marker) {
+    print("Marker ${marker.name} tapped!");
   }
 }
 
