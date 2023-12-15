@@ -1,11 +1,20 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+//----------------------------------------------------------------
 
+import 'package:osrm/osrm.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+
+//----------------------------------------------------------------
 class CustomMarker {
   final String name;
   final LatLng position;
@@ -47,11 +56,13 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   late final _animatedMapController = AnimatedMapController(vsync: this);
   List<CustomMarker> customMarkers = [];
   late Timer timer;
+  bool _followLocation = false;
+  var polypoints = <LatLng>[];
 
   @override
   void initState() {
     super.initState();
-    // getRoute();
+    getRoute();
 
     timer = Timer.periodic(Duration(seconds: 1), (Timer t) {
       updateCustomMarkers();
@@ -86,6 +97,43 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
     setState(() {});
   }
 
+  num distance = 0.0;
+  num duration = 0.0;
+
+  Future<void> getRoute() async {
+    final osrm = Osrm();
+    final options = RouteRequest(
+      coordinates: [
+        (42.12430040319571, 9.321449916744617),
+        (42.126954235434326, 9.301707721823323),
+        (42.111847805768306, 9.30367191871694),
+      ],
+      overview: OsrmOverview.full,
+    );
+
+    try {
+      final route = await osrm.route(options);
+      distance = route.routes.first.distance!;
+      duration = route.routes.first.duration!;
+      polypoints =
+          route.routes.first.geometry!.lineString!.coordinates.map((e) {
+        var location = e.toLocation();
+        return LatLng(location.lat, location.lng);
+      }).toList();
+
+      if (kDebugMode) {
+        // print(polypoints); // print the points in the debug format
+      }
+
+      setState(() {});
+    } catch (e) {
+      print("Error fetching route: $e");
+
+      // Handle the error
+      // For now, let's print the error and leave the UI unchanged
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,8 +154,58 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                 tileProvider: CancellableNetworkTileProvider(),
               ),
               AnimatedMarkerLayer(markers: markers),
+              CurrentLocationLayer(
+                // Customize the marker style
+                style: LocationMarkerStyle(
+                  markerSize: const Size(40, 40),
+                  marker: const Icon(
+                    Icons.circle,
+                    color: Colors.blue,
+                  ),
+                ),
+                // Follow location updates
+                // Follow location updates only when _followLocation is true
+                followOnLocationUpdate: _followLocation
+                    ? FollowOnLocationUpdate.always
+                    : FollowOnLocationUpdate.never,
+              ),
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: polypoints, // Wrap polypoints in another list
+                    strokeWidth: 4.0,
+                    color: Colors.grey,
+                  ),
+                ],
+              ),
               MarkerLayer(
                 markers: [
+                  if (polypoints.isNotEmpty)
+                    Marker(
+                      rotate: true,
+                      width: 100.0,
+                      height: 40.0,
+                      point: polypoints[
+                          math.max(0, (polypoints.length / 2).floor())],
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              '${distance.toStringAsFixed(2)} m',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   for (var marker in customMarkers)
                     Marker(
                       width: 80.0,
@@ -133,22 +231,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.end,
         separator: const SizedBox(height: 8),
         children: [
-          // FloatingActionButton(
-          //   onPressed: () => _animatedMapController.animatedRotateFrom(
-          //     90,
-          //     customId: _useTransformer ? _useTransformerId : null,
-          //   ),
-          //   tooltip: 'Rotate 90°',
-          //   child: const Icon(Icons.rotate_right),
-          // ),
-          // FloatingActionButton(
-          //   onPressed: () => _animatedMapController.animatedRotateFrom(
-          //     -90,
-          //     customId: _useTransformer ? _useTransformerId : null,
-          //   ),
-          //   tooltip: 'Rotate -90°',
-          //   child: const Icon(Icons.rotate_left),
-          // ),
           FloatingActionButton(
             onPressed: () {
               markers.value = [];
@@ -184,7 +266,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
               _animatedMapController.animatedFitCamera(
                 cameraFit: CameraFit.coordinates(
                   coordinates: points,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(50),
                 ),
                 rotation: 0,
                 customId: _useTransformer ? _useTransformerId : null,
@@ -196,14 +278,14 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             mainAxisSize: MainAxisSize.min,
             children: [
               FloatingActionButton(
-                tooltip: 'Move to next marker with offset',
+                tooltip: 'Move to previes marker',
                 onPressed: () {
                   if (markers.value.isEmpty) return;
 
                   final points = markers.value.map((m) => m.point);
                   setState(
                     () => _lastMovedToMarkerIndex =
-                        (_lastMovedToMarkerIndex + 1) % points.length,
+                        (_lastMovedToMarkerIndex - 1) % points.length,
                   );
 
                   _animatedMapController.animateTo(
@@ -212,7 +294,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                     offset: const Offset(100, 100),
                   );
                 },
-                child: const Icon(Icons.multiple_stop),
+                child: const Icon(Icons.skip_previous),
               ),
               const SizedBox.square(dimension: 8),
               FloatingActionButton(
@@ -231,13 +313,25 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                     customId: _useTransformer ? _useTransformerId : null,
                   );
                 },
-                child: const Icon(Icons.polyline_rounded),
+                child: const Icon(Icons.skip_next),
               ),
             ],
           ),
           FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                // Toggle the follow location flag
+                _followLocation = !_followLocation;
+              });
+            },
+            child: Icon(
+              _followLocation ? Icons.explore : Icons.my_location,
+            ),
+          ),
+          FloatingActionButton(
             tooltip: 'directions',
             onPressed: () {
+              getRoute();
               if (markers.value.length < 2) return;
 
               final points = markers.value.map((m) => m.point).toList();
@@ -258,7 +352,6 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             },
             child: const Icon(Icons.directions),
           ),
-
           FloatingActionButton.extended(
             label: Row(
               children: [
