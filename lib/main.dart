@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,8 @@ import 'package:osrm/osrm.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 
 //----------------------------------------------------------------
 class CustomMarker {
@@ -60,6 +63,26 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   bool _followLocation = false;
   var polypoints = <LatLng>[];
   // Example array of tuples
+  //-----------------------------------------------------------
+  // for searching
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
+  var client = http.Client();
+  List<OSMdata> _options = <OSMdata>[];
+  final baseUri = 'https://nominatim.openstreetmap.org';
+  final FocusNode _focusNode = FocusNode();
+
+  double calculateDistance(
+    double startLat,
+    double startLon,
+    double endLat,
+    double endLon,
+  ) {
+    double distanceInMeters =
+        Geolocator.distanceBetween(startLat, startLon, endLat, endLon);
+    return distanceInMeters / 1000; // Convert meters to kilometers
+  }
+  //----------------------------------------------------------------
 
   @override
   void initState() {
@@ -243,6 +266,440 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.end,
         separator: const SizedBox(height: 8),
         children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.all(35.0),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.5),
+                      spreadRadius: 2,
+                      blurRadius: 3,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _searchController,
+                      onChanged: (String value) {
+                        if (_debounce?.isActive ?? false) {
+                          _debounce?.cancel();
+                        }
+
+                        _debounce =
+                            Timer(const Duration(milliseconds: 2000), () async {
+                          try {
+                            if (kDebugMode) {
+                              print(value);
+                            }
+                            var client = http.Client();
+                            try {
+                              String url =
+                                  '$baseUri/search?q=$value&format=json&polygon_geojson=1&addressdetails=1';
+                              if (kDebugMode) {
+                                print(url);
+                              }
+                              var response = await client.get(Uri.parse(url));
+                              var decodedResponse =
+                                  jsonDecode(utf8.decode(response.bodyBytes))
+                                      as List<dynamic>;
+                              if (kDebugMode) {
+                                print(decodedResponse);
+                              }
+                              _options = decodedResponse
+                                  .map(
+                                    (e) => OSMdata(
+                                      displayname: e['display_name'],
+                                      lat: double.parse(e['lat']),
+                                      lon: double.parse(e['lon']),
+                                    ),
+                                  )
+                                  .toList();
+                            } finally {
+                              client.close();
+                            }
+
+                            setState(() {});
+                          } catch (error, stackTrace) {
+                            print('Error in onChanged: $error');
+                            print(stackTrace);
+                            // Handle the error as needed
+                          }
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search...',
+                        contentPadding: EdgeInsets.all(12),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                    StatefulBuilder(
+                      builder: ((context, setState) {
+                        // Sort the _options list based on distance
+                        _options.sort((a, b) {
+                          double distanceA = calculateDistance(
+                            center.latitude,
+                            center.longitude,
+                            a.lat,
+                            a.lon,
+                          );
+                          double distanceB = calculateDistance(
+                            center.latitude,
+                            center.longitude,
+                            b.lat,
+                            b.lon,
+                          );
+                          return distanceA.compareTo(distanceB);
+                        });
+
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _options.length > 5 ? 5 : _options.length,
+                          itemBuilder: (context, index) {
+                            // Calculate the distance from the current location
+                            double distance = calculateDistance(
+                              center.latitude,
+                              center.longitude,
+                              _options[index].lat,
+                              _options[index].lon,
+                            );
+
+                            return ListTile(
+                              title: Text(_options[index].displayname),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      'Coordinates: ${_options[index].lat},${_options[index].lon}'),
+                                  Text(
+                                      'Distance: ${distance.toStringAsFixed(2)} km'),
+                                ],
+                              ),
+                              onTap: () {
+                                // Ensure that this print statement executes
+                                print('Tapped on item at index $index');
+
+                                // Uncomment the line below if you want to move the map
+                                // _mapController.move(
+                                //   LatLng(_options[index].lat, _options[index].lon),
+                                //   15.0,
+                                // );
+
+                                // Print the selected latitude and longitude
+                                print(
+                                    'Selected LatLng: ${LatLng(_options[index].lat, _options[index].lon)}');
+
+                                _focusNode.unfocus();
+                                _options.clear();
+                                setState(() {});
+                              },
+                            );
+                          },
+                        );
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Align(
+          //   alignment: Alignment.topCenter,
+          //   child: Padding(
+          //     padding: const EdgeInsets.all(35.0),
+          //     child: Container(
+          //       width: double.infinity,
+          //       decoration: BoxDecoration(
+          //         color: Colors.white,
+          //         borderRadius: BorderRadius.circular(8),
+          //         boxShadow: [
+          //           BoxShadow(
+          //             color: Colors.grey.withOpacity(0.5),
+          //             spreadRadius: 2,
+          //             blurRadius: 3,
+          //             offset: Offset(0, 2),
+          //           ),
+          //         ],
+          //       ),
+          //       child: Column(children: [
+          //         TextField(
+          //           controller: _searchController,
+          //           onChanged: (String value) {
+          //             setState(() {
+          //               _searchController.clear();
+          //             });
+          //             if (_debounce?.isActive ?? false) {
+          //               _debounce?.cancel();
+          //             }
+
+          //             _debounce =
+          //                 Timer(const Duration(milliseconds: 2000), () async {
+          //               if (kDebugMode) {
+          //                 print(_searchController.text);
+          //               }
+          //               var client = http.Client();
+          //               try {
+          //                 String url =
+          //                     '$baseUri/search?q=$_searchController.text&format=json&polygon_geojson=1&addressdetails=1';
+          //                 if (kDebugMode) {
+          //                   print(url);
+          //                 }
+          //                 var response = await client.get(Uri.parse(url));
+          //                 // var response = await client.post(Uri.parse(url));
+          //                 var decodedResponse =
+          //                     jsonDecode(utf8.decode(response.bodyBytes))
+          //                         as List<dynamic>;
+          //                 if (kDebugMode) {
+          //                   print(decodedResponse);
+          //                 }
+          //                 _options = decodedResponse
+          //                     .map(
+          //                       (e) => OSMdata(
+          //                         displayname: e['display_name'],
+          //                         lat: double.parse(e['lat']),
+          //                         lon: double.parse(e['lon']),
+          //                       ),
+          //                     )
+          //                     .toList();
+          //                 setState(() {});
+          //               } finally {
+          //                 client.close();
+          //               }
+
+          //               setState(() {});
+          //             });
+          //           },
+          //           decoration: InputDecoration(
+          //             hintText: 'Search...',
+          //             contentPadding: EdgeInsets.all(12),
+          //             border: InputBorder.none,
+          //             suffixIcon: _searchController.text.isNotEmpty
+          //                 ? IconButton(
+          //                     onPressed: () {},
+          //                     icon: Icon(Icons.clear),
+          //                   )
+          //                 : null,
+          //           ),
+          //         ),
+          //         StatefulBuilder(
+          //           builder: ((context, setState) {
+          //             // Sort the _options list based on distance
+          //             _options.sort((a, b) {
+          //               double distanceA = calculateDistance(
+          //                 center.latitude,
+          //                 center.longitude,
+          //                 a.lat,
+          //                 a.lon,
+          //               );
+          //               double distanceB = calculateDistance(
+          //                 center.latitude,
+          //                 center.longitude,
+          //                 b.lat,
+          //                 b.lon,
+          //               );
+          //               return distanceA.compareTo(distanceB);
+          //             });
+
+          //             return ListView.builder(
+          //               shrinkWrap: true,
+          //               physics: const NeverScrollableScrollPhysics(),
+          //               itemCount: _options.length > 5 ? 5 : _options.length,
+          //               itemBuilder: (context, index) {
+          //                 // Calculate the distance from the current location
+          //                 double distance = calculateDistance(
+          //                   center.latitude,
+          //                   center.longitude,
+          //                   _options[index].lat,
+          //                   _options[index].lon,
+          //                 );
+
+          //                 return ListTile(
+          //                   title: Text(_options[index].displayname),
+          //                   subtitle: Column(
+          //                     crossAxisAlignment: CrossAxisAlignment.start,
+          //                     children: [
+          //                       Text(
+          //                           'Coordinates: ${_options[index].lat},${_options[index].lon}'),
+          //                       Text(
+          //                           'Distance: ${distance.toStringAsFixed(2)} km'),
+          //                     ],
+          //                   ),
+          //                   onTap: () {
+          //                     // Ensure that this print statement executes
+          //                     print('Tapped on item at index $index');
+
+          //                     // Uncomment the line below if you want to move the map
+          //                     // _mapController.move(
+          //                     //   LatLng(_options[index].lat, _options[index].lon),
+          //                     //   15.0,
+          //                     // );
+
+          //                     // Print the selected latitude and longitude
+          //                     print(
+          //                         'Selected LatLng: ${LatLng(_options[index].lat, _options[index].lon)}');
+
+          //                     _focusNode.unfocus();
+          //                     _options.clear();
+          //                     setState(() {});
+          //                   },
+          //                 );
+          //               },
+          //             );
+          //           }),
+          //         ),
+          //       ]),
+          //     ),
+          //   ),
+          // ),
+          // Positioned(
+          //   top: 0,
+          //   left: 0,
+          //   right: 0,
+          //   //  padding: const EdgeInsets.all(35.0),
+          //   child: Container(
+          //     width: double.infinity,
+          //     decoration: BoxDecoration(
+          //       color: Colors.white,
+          //       borderRadius: BorderRadius.circular(8),
+          //       boxShadow: [
+          //         BoxShadow(
+          //           color: Colors.grey.withOpacity(0.5),
+          //           spreadRadius: 2,
+          //           blurRadius: 3,
+          //           offset: Offset(0, 2),
+          //         ),
+          //       ],
+          //     ),
+          //     child: Column(
+          //       children: [
+          //         TextFormField(
+          //             controller: _searchController,
+          //             focusNode: _focusNode,
+          //             decoration: InputDecoration(
+          //               hintText: 'widget.hintText',
+          //               // border: inputBorder,
+          //               // focusedBorder: inputFocusBorder,
+          //             ),
+          //             onChanged: (String value) {
+          //               if (_debounce?.isActive ?? false) {
+          //                 _debounce?.cancel();
+          //               }
+
+          //               _debounce =
+          //                   Timer(const Duration(milliseconds: 2000), () async {
+          //                 if (kDebugMode) {
+          //                   print(value);
+          //                 }
+          //                 var client = http.Client();
+          //                 try {
+          //                   String url =
+          //                       '$baseUri/search?q=$value&format=json&polygon_geojson=1&addressdetails=1';
+          //                   if (kDebugMode) {
+          //                     print(url);
+          //                   }
+          //                   var response = await client.get(Uri.parse(url));
+          //                   // var response = await client.post(Uri.parse(url));
+          //                   var decodedResponse =
+          //                       jsonDecode(utf8.decode(response.bodyBytes))
+          //                           as List<dynamic>;
+          //                   if (kDebugMode) {
+          //                     print(decodedResponse);
+          //                   }
+          //                   _options = decodedResponse
+          //                       .map(
+          //                         (e) => OSMdata(
+          //                           displayname: e['display_name'],
+          //                           lat: double.parse(e['lat']),
+          //                           lon: double.parse(e['lon']),
+          //                         ),
+          //                       )
+          //                       .toList();
+          //                   setState(() {});
+          //                 } finally {
+          //                   client.close();
+          //                 }
+
+          //                 setState(() {});
+          //               });
+          //             }),
+          //         StatefulBuilder(
+          //           builder: ((context, setState) {
+          //             // Sort the _options list based on distance
+          //             _options.sort((a, b) {
+          //               double distanceA = calculateDistance(
+          //                 center.latitude,
+          //                 center.longitude,
+          //                 a.lat,
+          //                 a.lon,
+          //               );
+          //               double distanceB = calculateDistance(
+          //                 center.latitude,
+          //                 center.longitude,
+          //                 b.lat,
+          //                 b.lon,
+          //               );
+          //               return distanceA.compareTo(distanceB);
+          //             });
+
+          //             return ListView.builder(
+          //               shrinkWrap: true,
+          //               physics: const NeverScrollableScrollPhysics(),
+          //               itemCount: _options.length > 5 ? 5 : _options.length,
+          //               itemBuilder: (context, index) {
+          //                 // Calculate the distance from the current location
+          //                 double distance = calculateDistance(
+          //                   center.latitude,
+          //                   center.longitude,
+          //                   _options[index].lat,
+          //                   _options[index].lon,
+          //                 );
+
+          //                 return ListTile(
+          //                   title: Text(_options[index].displayname),
+          //                   subtitle: Column(
+          //                     crossAxisAlignment: CrossAxisAlignment.start,
+          //                     children: [
+          //                       Text(
+          //                           'Coordinates: ${_options[index].lat},${_options[index].lon}'),
+          //                       Text(
+          //                           'Distance: ${distance.toStringAsFixed(2)} km'),
+          //                     ],
+          //                   ),
+          //                   onTap: () {
+          //                     // Ensure that this print statement executes
+          //                     print('Tapped on item at index $index');
+
+          //                     // Uncomment the line below if you want to move the map
+          //                     // _mapController.move(
+          //                     //   LatLng(_options[index].lat, _options[index].lon),
+          //                     //   15.0,
+          //                     // );
+
+          //                     // Print the selected latitude and longitude
+          //                     print(
+          //                         'Selected LatLng: ${LatLng(_options[index].lat, _options[index].lon)}');
+
+          //                     _focusNode.unfocus();
+          //                     _options.clear();
+          //                     setState(() {});
+          //                   },
+          //                 );
+          //               },
+          //             );
+          //           }),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ),
           FloatingActionButton(
             onPressed: () {
               markers.value = [];
@@ -409,6 +866,22 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   void onMarkerTap(CustomMarker marker) {
     print("Marker ${marker.name} tapped!");
   }
+
+  //----------------------------------------------------------------
+  // Future<PickedData> pickData() async {
+  //   // LatLong center = LatLong(
+  //   //     _mapController.center.latitude, _mapController.center.longitude);
+  //   var client = http.Client();
+  //   String url =
+  //       '$baseUri/reverse?format=json&lat=${_mapController.center.latitude}&lon=${_mapController.center.longitude}&zoom=18&addressdetails=1';
+
+  //   var response = await client.get(Uri.parse(url));
+  //   // var response = await client.post(Uri.parse(url));
+  //   var decodedResponse =
+  //       jsonDecode(utf8.decode(response.bodyBytes)) as Map<dynamic, dynamic>;
+  //   String displayName = decodedResponse['display_name'];
+  //   // return PickedData( displayName, decodedResponse["address"]);
+  // }
 }
 
 class MyMarker extends AnimatedMarker {
@@ -503,3 +976,40 @@ final _animatedMoveTileUpdateTransformer = TileUpdateTransformer.fromHandlers(
     }
   },
 );
+
+//----------------------------------------------------------------
+class OSMdata {
+  final String displayname;
+  final double lat;
+  final double lon;
+  OSMdata({required this.displayname, required this.lat, required this.lon});
+  @override
+  String toString() {
+    return '$displayname, $lat, $lon';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (other.runtimeType != runtimeType) {
+      return false;
+    }
+    return other is OSMdata && other.displayname == displayname;
+  }
+
+  @override
+  int get hashCode => Object.hash(displayname, lat, lon);
+}
+
+class LatLong {
+  final double latitude;
+  final double longitude;
+  const LatLong(this.latitude, this.longitude);
+}
+
+class PickedData {
+  final LatLong latLong;
+  final String addressName;
+  final Map<String, dynamic> address;
+
+  PickedData(this.latLong, this.addressName, this.address);
+}
