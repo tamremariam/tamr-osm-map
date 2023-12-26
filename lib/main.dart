@@ -7,6 +7,7 @@ import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+import 'package:tuple/tuple.dart';
 //----------------------------------------------------------------
 
 import 'package:osrm/osrm.dart';
@@ -50,7 +51,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   final markers = ValueNotifier<List<AnimatedMarker>>([]);
   final center = const LatLng(9.307519939764234, 42.125973344740515);
 
-  bool _useTransformer = true;
+  // bool _useTransformer = true;
   int _lastMovedToMarkerIndex = -1;
 
   late final _animatedMapController = AnimatedMapController(vsync: this);
@@ -58,6 +59,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
   late Timer timer;
   bool _followLocation = false;
   var polypoints = <LatLng>[];
+  // Example array of tuples
 
   @override
   void initState() {
@@ -153,6 +155,16 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                 tileUpdateTransformer: _animatedMoveTileUpdateTransformer,
                 tileProvider: CancellableNetworkTileProvider(),
               ),
+              // TileLayer(
+              //   wmsOptions: WMSTileLayerOptions(
+              //     baseUrl: 'https://{s}.s2maps-tiles.eu/wms/?',
+              //     layers: const ['s2cloudless-2021_3857'],
+              //   ),
+              //   subdomains: const ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+              //   userAgentPackageName: 'dev.fleaflet.flutter_map.example',
+              //   tileUpdateTransformer: _animatedMoveTileUpdateTransformer,
+              //   tileProvider: CancellableNetworkTileProvider(),
+              // ),
               AnimatedMarkerLayer(markers: markers),
               CurrentLocationLayer(
                 // Customize the marker style
@@ -234,10 +246,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
           FloatingActionButton(
             onPressed: () {
               markers.value = [];
+              polypoints = [];
               _animatedMapController.animateTo(
                 dest: center,
-                rotation: 0,
-                customId: _useTransformer ? _useTransformerId : null,
+                // rotation: 0,
+                // customId: _useTransformer ? _useTransformerId : null,
               );
             },
             tooltip: 'Clear modifications',
@@ -245,15 +258,15 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
           ),
           FloatingActionButton(
             onPressed: () => _animatedMapController.animatedZoomIn(
-              customId: _useTransformer ? _useTransformerId : null,
-            ),
+                // customId: _useTransformer ? _useTransformerId : null,
+                ),
             tooltip: 'Zoom in',
             child: const Icon(Icons.zoom_in),
           ),
           FloatingActionButton(
             onPressed: () => _animatedMapController.animatedZoomOut(
-              customId: _useTransformer ? _useTransformerId : null,
-            ),
+                // customId: _useTransformer ? _useTransformerId : null,
+                ),
             tooltip: 'Zoom out',
             child: const Icon(Icons.zoom_out),
           ),
@@ -269,7 +282,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.all(50),
                 ),
                 rotation: 0,
-                customId: _useTransformer ? _useTransformerId : null,
+                // customId: _useTransformer ? _useTransformerId : null,
               );
             },
             child: const Icon(Icons.center_focus_strong),
@@ -290,7 +303,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
                   _animatedMapController.animateTo(
                     dest: points.elementAt(_lastMovedToMarkerIndex),
-                    customId: _useTransformer ? _useTransformerId : null,
+                    // customId: _useTransformer ? _useTransformerId : null,
                     offset: const Offset(100, 100),
                   );
                 },
@@ -310,7 +323,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
 
                   _animatedMapController.animateTo(
                     dest: points.elementAt(_lastMovedToMarkerIndex),
-                    customId: _useTransformer ? _useTransformerId : null,
+                    // customId: _useTransformer ? _useTransformerId : null,
                   );
                 },
                 child: const Icon(Icons.skip_next),
@@ -320,8 +333,9 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
           FloatingActionButton(
             onPressed: () {
               setState(() {
-                // Toggle the follow location flag
                 _followLocation = !_followLocation;
+                _animatedMapController.animateTo(zoom: 18);
+                // Toggle the follow location flag
               });
             },
             child: Icon(
@@ -341,7 +355,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.all(12),
                 ),
                 rotation: 0,
-                customId: _useTransformer ? _useTransformerId : null,
+                // customId: _useTransformer ? _useTransformerId : null,
               );
 
               // Print the coordinates of markers
@@ -352,24 +366,24 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             },
             child: const Icon(Icons.directions),
           ),
-          FloatingActionButton.extended(
-            label: Row(
-              children: [
-                const Text('Transformer'),
-                Switch(
-                  activeColor: Colors.blue.shade200,
-                  activeTrackColor: Colors.black38,
-                  value: _useTransformer,
-                  onChanged: (newValue) {
-                    setState(() => _useTransformer = newValue);
-                  },
-                ),
-              ],
-            ),
-            onPressed: () {
-              setState(() => _useTransformer = !_useTransformer);
-            },
-          ),
+          // FloatingActionButton.extended(
+          //   label: Row(
+          //     children: [
+          //       const Text('Transformer'),
+          //       Switch(
+          //         activeColor: Colors.blue.shade200,
+          //         activeTrackColor: Colors.black38,
+          //         value: _useTransformer,
+          //         onChanged: (newValue) {
+          //           setState(() => _useTransformer = newValue);
+          //         },
+          //       ),
+          //     ],
+          //   ),
+          //   onPressed: () {
+          //     setState(() => _useTransformer = !_useTransformer);
+          //   },
+          // ),
         ],
       ),
     );
@@ -383,7 +397,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
             point: point,
             onTap: () => _animatedMapController.animateTo(
               dest: point,
-              customId: _useTransformer ? _useTransformerId : null,
+              // customId: _useTransformer ? _useTransformerId : null,
             ),
           ),
         );
@@ -462,12 +476,12 @@ final _animatedMoveTileUpdateTransformer = TileUpdateTransformer.fromHandlers(
     final id = AnimationId.fromMapEvent(updateEvent.mapEvent);
 
     if (id == null) return sink.add(updateEvent);
-    if (id.customId != _MyHomePageState._useTransformerId) {
-      if (id.moveId == AnimatedMoveId.started) {
-        debugPrint('TileUpdateTransformer disabled, using default behaviour.');
-      }
-      return sink.add(updateEvent);
-    }
+    // if (id.customId != _MyHomePageState._useTransformerId) {
+    //   if (id.moveId == AnimatedMoveId.started) {
+    //     debugPrint('TileUpdateTransformer disabled, using default behaviour.');
+    //   }
+    //   return sink.add(updateEvent);
+    // }
 
     switch (id.moveId) {
       case AnimatedMoveId.started:
